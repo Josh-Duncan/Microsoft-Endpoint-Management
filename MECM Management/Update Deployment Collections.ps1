@@ -261,7 +261,7 @@ if ($ClearCollections -eq $true -and $HardStop -eq $false)
         write-output (" | Include memberships ignored: " + $CollectionInClude.Count) | Tee-Object -FilePath $OutputFile -Append
 
         $CollectionExclude = Get-CMCollectionExcludeMembershipRule -CollectionName $collection.CollectionName
-        write-output (" | Exclude memberships ignored: " + $CollectionInClude.Count) | Tee-Object -FilePath $OutputFile -Append
+        write-output (" | Exclude memberships ignored: " + $CollectionExclude.Count) | Tee-Object -FilePath $OutputFile -Append
 
         $CollectionQuery = Get-CMCollectionQueryMembershipRule -CollectionName $collection.CollectionName
         write-output (" | Query memberships rules ignored: " + $CollectionQuery.Count) | Tee-Object -FilePath $OutputFile -Append
@@ -390,10 +390,14 @@ LineBreak
 # This does display invalid ojects as well
 If ($HardStop -eq $false)
 {
+    $i = 0
     ForEach ($DeviceToCheck in $DeviceCollectionAssignmentList)
     {
+        $i++
+        Write-Progress -Activity "Validating Devices..." -Status "Status:" -PercentComplete (($i/$DeviceCollectionAssignmentList.Count)*100) -CurrentOperation ($i.ToString() + "/" + $DeviceCollectionAssignmentList.Count + " processed")
         $DeviceCheck = Get-CMDevice -CollectionName $DeviceToCheck.CollectionName -Name $DeviceToCheck.DeviceName
-    
+        #if ($ScriptDebug -eq $true){Start-Sleep 1} #when you really need to slow things down...
+        
         if ($DeviceCheck.count -eq 0)
         {
             Write-Output ($DeviceToCheck.DeviceName + " failed verification check in collection " + $DeviceToCheck.CollectionName)
