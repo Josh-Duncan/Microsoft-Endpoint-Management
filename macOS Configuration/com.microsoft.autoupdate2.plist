@@ -1,0 +1,8 @@
+<key>StartDaemonOnAppLaunch</key>
+<true/>
+<key>HowToCheck</key>
+<string>AutomaticDownload</string>
+<key>UpdateCheckFrequency</key>
+<integer>360</integer>
+<key>ChannelName</key>
+<string>Production</string>
