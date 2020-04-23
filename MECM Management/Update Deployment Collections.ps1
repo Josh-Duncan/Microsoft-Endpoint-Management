@@ -3,12 +3,12 @@
 #
 # Must load the Configuration Manager ISE Connect script prior to running this script
 #
-# Last tested with MECM Current Branch 1910
+# Last tested with MECM Current Branch 2002
 # 
 # Josh Duncan
-# 2020-03-31
+# 2020-04-23
 # https://github.com/Josh-Duncan
-#
+# https://github.com/Josh-Duncan/MEM_MECM/wiki/Update-Deployment-Collections.ps1
 
 
 $CollectionList_CSV_Path = ($env:USERPROFILE + "\Desktop\SCCM\_CollectionList.csv")
@@ -32,9 +32,9 @@ $OutputFilePath = ($env:USERPROFILE + "\Desktop\SCCM\")
         # Path the output log is stored
 
 $ScriptDebug = $false
-        # Put the script into debug mode (I added this way to late)
+        # Put the script into debug mode (I added this way too late)
 
-$ClearCollections = $true
+$ClearCollections = $false
         # Clear the listed collections before adding the devices?  true or false
 
 $ValidationWaitTimer = 10
@@ -111,7 +111,7 @@ Function Wait-CollectionRefresh
             {
                 if ($ScriptDebug -eq $true)
                 {
-                    Write-Output ($Collection.CollectionName + " Ready")
+                    Write-Output "$Collection Ready"
                 }
             }
         }
@@ -144,13 +144,13 @@ LineBreak
 # Validate the root collection prior to doing anything destructive
 if (-not (Get-CMCollection -Name $CMRootCollection))
 {
-    Write-Output ("ERROR: You do not have access to """ + $CMRootCollection + """ or it does not exist.")
+    Write-Output ("ERROR: You do not have access to ""$CMRootCollection"" or it does not exist.")
     $HardStop = $true
 }
 
 if ($ScriptDebug -eq $true)
 {
-    Write-Output ("Root collection set as: " + $CMRootCollection)
+    Write-Output ("Root collection set as: $CMRootCollection")
 }
 
 LineBreak
@@ -159,7 +159,7 @@ LineBreak
 
 if (-not (Test-Path $CollectionList_CSV_Path))
 {
-    Write-Output ("Collection list (" + $CollectionList_CSV_Path + ") is invalid.") | Tee-Object -FilePath $OutputFile -Append
+    Write-Output "Collection list ($CollectionList_CSV_Path) is invalid." | Tee-Object -FilePath $OutputFile -Append
     $inputfile = Read-Host "Please enter the location of the valid collection list file"
     $CollectionList = Import-CSV $inputfile
     $CollectionList_CSV_Path = $inputfile
@@ -172,7 +172,7 @@ if (-not (Test-Path $CollectionList_CSV_Path))
 }
 Else
 {
-    Write-Output ("Using script defined path: " + $CollectionList_CSV_Path) | Tee-Object -FilePath $OutputFile -Append
+    Write-Output "Using script defined path: $CollectionList_CSV_Path" | Tee-Object -FilePath $OutputFile -Append
     $CollectionList = Import-CSV $CollectionList_CSV_Path 
         # Import collection validation list
 }
@@ -184,7 +184,7 @@ $inputfile = @()
 
 if (-not (Test-Path $DeviceCollectionAssignmentList_CSV_Path))
 {
-    Write-Output ("Device assignment list (" + $DeviceCollectionAssignmentList_CSV_Path + ") is invalid.") | Tee-Object -FilePath $OutputFile -Append
+    Write-Output ("Device assignment list ($DeviceCollectionAssignmentList_CSV_Path) is invalid.") | Tee-Object -FilePath $OutputFile -Append
     $inputfile = Read-Host "Please enter the location of the valid collection list file"
     $DeviceCollectionAssignmentList = Import-CSV $inputfile
     $DeviceCollectionAssignmentList_CSV_Path = $inputfile
@@ -197,16 +197,16 @@ if (-not (Test-Path $DeviceCollectionAssignmentList_CSV_Path))
 }
 Else
 {
-    Write-Output ("Using script defined path: " + $DeviceCollectionAssignmentList_CSV_Path) | Tee-Object -FilePath $OutputFile -Append
+    Write-Output "Using script defined path: $DeviceCollectionAssignmentList_CSV_Path" | Tee-Object -FilePath $OutputFile -Append
     $DeviceCollectionAssignmentList = Import-CSV $DeviceCollectionAssignmentList_CSV_Path
         # Import the list of devices and what collections they should be added to
 }
 
 LineBreak
-Write-Output ("Using """ + $CollectionList_CSV_Path + """ to clear and validate collection data") | Tee-Object -FilePath $OutputFile -Append
+Write-Output "Using ""$CollectionList_CSV_Path"" to clear and validate collection data" | Tee-Object -FilePath $OutputFile -Append
 
 Linebreak
-Write-Output ("Using """ + $DeviceCollectionAssignmentList_CSV_Path + """ to assign devices to collections") | Tee-Object -FilePath $OutputFile -Append
+Write-Output "Using ""$DeviceCollectionAssignmentList_CSV_Path"" to assign devices to collections" | Tee-Object -FilePath $OutputFile -Append
 
 LineBreak
 
@@ -395,9 +395,17 @@ If ($HardStop -eq $false)
     {
         $i++
         Write-Progress -Activity "Validating Devices..." -Status "Status:" -PercentComplete (($i/$DeviceCollectionAssignmentList.Count)*100) -CurrentOperation ($i.ToString() + "/" + $DeviceCollectionAssignmentList.Count + " processed")
-        $DeviceCheck = Get-CMDevice -CollectionName $DeviceToCheck.CollectionName -Name $DeviceToCheck.DeviceName
-        #if ($ScriptDebug -eq $true){Start-Sleep 1} #when you really need to slow things down...
-        
+        try
+        {
+            $DeviceCheck = Get-CMDevice -CollectionName $DeviceToCheck.CollectionName -Name $DeviceToCheck.DeviceName
+            #if ($ScriptDebug -eq $true){Start-Sleep 1} #when you really need to slow things down...
+        }
+        catch
+        {
+            Write-Error "Something terrible happened!" | Out-Null
+            Write-Error $_.exception.message
+            $FailedVerificationCount++
+        }
         if ($DeviceCheck.count -eq 0)
         {
             Write-Output ($DeviceToCheck.DeviceName + " failed verification check in collection " + $DeviceToCheck.CollectionName)
