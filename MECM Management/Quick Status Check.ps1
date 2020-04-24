@@ -1,8 +1,3 @@
-﻿# Must load the Configuration Manager ISE Connect script prior to running this script
-# TODO make this script run without the ISE connect script
-#
-# This is a steaming pile of mess that should never be seen by the public.
-#
 # Last tested with MECM Current Branch 2002
 # It is unclear how much backwards compatibility it may have.  Use at your own peril
 #
