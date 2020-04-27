@@ -182,17 +182,21 @@ $i = 0
 foreach ($SUDeployment in $SUDeployments)
 {
     Write-Progress -Activity "Updating Deployment Summarization..." -Status "Status:" -PercentComplete (($i/$SUDeployments.Count)*100) -CurrentOperation ($i.ToString() + "/" + $SUDeployments.Count + " processed")
-
-    if ($SUDeployment.SummarizationTime.AddMinutes($MaxSummarizationMinutes) -lt $DateNow.ToUniversalTime())
-    {
+    
+    #if ($SUDeployment.SummarizationTime -eq $null){write-host "  ! Null value detected"$SUDeployment.ApplicationName -ForegroundColor Red}
+    
+    try{($SUDeployment.SummarizationTime -ne $null) | Out-Null
+    
+        if ($SUDeployment.SummarizationTime.AddMinutes($MaxSummarizationMinutes) -lt $DateNow.ToUniversalTime()) 
+                                                                                                        {
         Write-Host "  + Updating:"$SUDeployment.ApplicationName -ForegroundColor Yellow
+            if ($ScriptDebug -eq $true)
+            {
+                Write-Host "    |        Now:"$DateNow -ForegroundColor Magenta
+                Write-Host "    | (UTC)  Now:"$DateNow.ToUniversalTime() -ForegroundColor Magenta
+                Write-Host "    | (UTC) Sync:"$SUDeployment.SummarizationTime -ForegroundColor Magenta
+            }
         Invoke-CMDeploymentSummarization -DeploymentId $SUDeployment.DeploymentID
-        if ($ScriptDebug -eq $true)
-        {
-            Write-Host "    |        Now:"$DateNow -ForegroundColor Magenta
-            Write-Host "    | (UTC)  Now:"$DateNow.ToUniversalTime() -ForegroundColor Magenta
-            Write-Host "    | (UTC) Sync:"$SUDeployment.SummarizationTime -ForegroundColor Magenta
-        }
         # The lesson to be leared in all this UTC debugging is that CM returns UTC as the summarization time by default. 
         do
         {
@@ -204,16 +208,19 @@ foreach ($SUDeployment in $SUDeployments)
         
         $DeploymentTimeCheck = @()
     }
-    else
-    {
-        Write-Host " OK Skipping:"$SUDeployment.ApplicationName -ForegroundColor Green
-        if ($ScriptDebug -eq $true)
+        else
         {
-            Write-Host "    |        Now:"$DateNow -ForegroundColor Magenta
-            Write-Host "    | (UTC)  Now:"$DateNow.ToUniversalTime() -ForegroundColor Magenta
-            Write-Host "    | (UTC) Sync:"$SUDeployment.SummarizationTime -ForegroundColor Magenta
+            Write-Host " OK Skipping:"$SUDeployment.ApplicationName -ForegroundColor Green
+            if ($ScriptDebug -eq $true)
+            {
+                Write-Host "    |        Now:"$DateNow -ForegroundColor Magenta
+                Write-Host "    | (UTC)  Now:"$DateNow.ToUniversalTime() -ForegroundColor Magenta
+                Write-Host "    | (UTC) Sync:"$SUDeployment.SummarizationTime -ForegroundColor Magenta
+            }
         }
     }
+    catch
+        {Write-host "  ! Skipping: Null value detected with"$SUDeployment.ApplicationName"to collection"$SUDeployment.CollectionName -ForegroundColor red}
     $i++
 }    
 
@@ -225,8 +232,12 @@ $i = 0
 
 foreach ($SUDeployment in $SUDeployments)
 {
-    if (([math]::Round($SUDeployment.NumberSuccess / $SUDeployment.NumberTargeted * 100,1)) -lt $SUMinCompliance)
-    {$BelowCompliance++}
+    
+    try{($SUDeployment.SummarizationTime -ne $null) | Out-Null
+        if (([math]::Round($SUDeployment.NumberSuccess / $SUDeployment.NumberTargeted * 100,1)) -lt $SUMinCompliance)
+        {$BelowCompliance++}
+    }
+    catch{}
 }
 
 write-host ""
@@ -240,6 +251,7 @@ if ($SUDeployments.Count -ne 0)
 {
     foreach ($SUDeployment in $SUDeployments)
     {
+    try{($SUDeployment.SummarizationTime -ne $null) | Out-Null
         if (([math]::Round($SUDeployment.NumberSuccess / $SUDeployment.NumberTargeted * 100,1)) -lt $SUMinCompliance)
         {
             $DeploymentCompliance_Output = ([math]::Round($SUDeployment.NumberSuccess / $SUDeployment.NumberTargeted * 100,1))
@@ -249,7 +261,11 @@ if ($SUDeployments.Count -ne 0)
             if ($SUDeployment.EnforcementDeadline.AddDays(+$SUComplianceSched).ToString("yyyy-MM-dd") -lt $DateNow.ToString("yyyy-MM-dd"))
             {$JSON_SUCompliance = $JSON_SUCompliance + "{""name"": """",""value"": "">" + $DeploymentCompliance_Output + "% " `
                 + $SUDeployment.ApplicationName + " (" + $diff.Days + " days past deadline)""},"}
+            }
         }
+        catch
+        {Write-Host "    | NULL-"$SUDeployment.ApplicationName"to"$SUDeployment.CollectionName -ForegroundColor Red}
+
     }
 }
 
