@@ -260,7 +260,7 @@ if ($SUDeployments.Count -ne 0)
             write-host ("    | " + $DeploymentCompliance_Output + "% " + $SUDeployment.ApplicationName + " (" + $diff.Days + " days past deadline)")
             if ($SUDeployment.EnforcementDeadline.AddDays(+$SUComplianceSched).ToString("yyyy-MM-dd") -lt $DateNow.ToString("yyyy-MM-dd"))
             {$JSON_SUCompliance = $JSON_SUCompliance + "{""name"": """",""value"": "">" + $DeploymentCompliance_Output + "% " `
-                + $SUDeployment.ApplicationName + " (" + $diff.Days + " days past deadline)""},"}
+                + $SUDeployment.ApplicationName + " (" + $diff.Days + " days past compliance)""},"}
             }
         }
         catch
