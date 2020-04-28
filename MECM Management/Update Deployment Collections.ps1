@@ -3,12 +3,6 @@
 #
 # Must load the Configuration Manager ISE Connect script prior to running this script
 #
-# Last tested with MECM Current Branch 2002
-# 
-# Josh Duncan
-# 2020-04-23
-# https://github.com/Josh-Duncan
-# https://github.com/Josh-Duncan/MEM_MECM/wiki/Update-Deployment-Collections.ps1
 
 
 $CollectionList_CSV_Path = ($env:USERPROFILE + "\Desktop\SCCM\_CollectionList.csv")
