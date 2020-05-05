@@ -5,7 +5,7 @@
 # This script does not currently need write permissions to anything.
 #
 # Josh Duncan
-# 2020-04-24
+# 2020-05-05
 # https://github.com/Josh-Duncan
 # https://github.com/Josh-Duncan/MEM_MECM/wiki/Quick-Health-Check.ps1
 #
@@ -36,6 +36,35 @@ $SiteCode = "Primary Site Code"
 
 $ProviderMachineName = "Primary Server Name"
     # Primary Site Server Name
+
+    #List of Supported OS's
+$SupportedOSs = "Microsoft Windows NT Workstation 10.0",
+                ` "Microsoft Windows NT Workstation 10.0 (Tablet Edition)",
+                ` "Microsoft Windows NT Server 10.0",
+                ` "Microsoft Windows NT Advanced Server 10.0",
+                ` "Microsoft Windows NT Workstation 6.3",
+                ` "Microsoft Windows NT Server 6.3", 
+                ` "Microsoft Windows NT Advanced Server 6.3", 
+                ` "Microsoft Windows NT Server 6.2", 
+                ` "Microsoft Windows NT Advanced Server 6.2"
+    # ---
+
+    #Devices in CM that should be ignored for compliance and health checks
+$IgnoreDevices = "Provisioning Device (Provisioning Device)",
+                ` "x86 Unknown Computer (x86 Unknown Computer)",
+                ` "x64 Unknown Computer (x64 Unknown Computer)"
+    # ---
+
+    #Make SCCM Alert errors mean something useful to anyone who's not familiar ith CM alerts.
+$CMErrorTranslation = @{
+                '$DatabaseFreeSpaceWarningName' = 'Database Free Space Warning';
+                'ExampleNextRecord' = 'Future Translation';
+                    }
+
+    #The list of errors that should have their information pulled from the "InstanceNameParam1" field instead of the Name field.
+$CMErrorParam1 = '$SUMCompliance2UpdateGroupDeploymentName',
+                ` 'Rule Failure alert'
+    # ---
 
 # ------------------------------------------------
 # No variables to edit below here...
@@ -150,11 +179,26 @@ else
 {
     foreach ($Alert in $CMAlerts_Critical)
     {
-        Write-Host "    | "$Alert.Name
-        $JSON_CriticalAlert = $JSON_CriticalAlert + "{""name"": """",""value"": "">" + $Alert.Name + """},"
+
+        if  ($CMErrorTranslation.Contains($Alert.Name))
+        {
+            write-host "    | "$CMErrorTranslation.($Alert.Name)
+            $JSON_CriticalAlert = $JSON_CriticalAlert + "{""name"": """",""value"": "">" + $CMErrorTranslation.($Alert.Name) + """},"
+        }
+        elseif ($CMErrorParam1.Contains($Alert.Name))
+        {
+            Write-Host "    | "$Alert.InstanceNameParam1
+            $JSON_CriticalAlert = $JSON_CriticalAlert + "{""name"": """",""value"": "">" + $Alert.InstanceNameParam1 + """},"
+        }
+        else
+        {
+            Write-Host "    | "$Alert.name
+            $JSON_CriticalAlert = $JSON_CriticalAlert + "{""name"": """",""value"": "">" + $Alert.name + """},"
+        }
     }
 }
 $Alert = @()
+
 
 Write-Host ""
 write-host "   Warning"
@@ -163,7 +207,20 @@ if ($CMAlerts_Warning.count -eq 0)
 else
 {
     foreach ($Alert in $CMAlerts_Warning)
-        {Write-Host "    | "$Alert.Name}
+    {    
+        if  ($CMErrorTranslation.Contains($Alert.Name))
+        {
+            write-host "    | "$CMErrorTranslation.($Alert.Name)
+        }
+        elseif ($CMErrorParam1.Contains($Alert.Name))
+        {
+            Write-Host "    | "$Alert.InstanceNameParam1
+        }
+        else
+        {
+            Write-Host "    | "$Alert.name
+        }
+    }
 }
 
 # ------------------------------------------------
@@ -265,11 +322,65 @@ if ($SUDeployments.Count -ne 0)
         }
         catch
         {Write-Host "    | NULL-"$SUDeployment.ApplicationName"to"$SUDeployment.CollectionName -ForegroundColor Red}
+    }
+}
 
+# ------------------------------------------------
+# Client Agent Status
+
+Write-Host ""
+Write-Host "Client Status"
+$AllDevices = Get-CMDevice | Select-Object DeviceOS,Name,ClientType,`
+                ClientActiveStatus,ClientCertType,ClientCheckPass,ClientEdition,ClientRemediationSuccess,`
+                ClientState,ClientVersionIsClient,IsDecommissioned
+
+$JSON_CLientHealth = "{""name"": ""Client Health"",""value"": """ + $AllDevices.count + " total devices found""},"
+
+#Find Missing clients
+                
+Write-Host " | "(($AllDevices | Where-Object {(!$_.ClientType)}).count - $IgnoreDevices.Count)"devices missing client agent."
+
+if ((($AllDevices.Count | Where-Object {(!$_.ClientType)}) - $IgnoreDevices.Count) -gt 0)
+{
+    $JSON_CLientHealth = $JSON_CLientHealth + ("{""name"": """",""value"": "">" + (($AllDevices | Where-Object {(!$_.ClientType)}).Count - $IgnoreDevices.Count) + " devices missing client agent" + """},")
+}
+
+# Find unhealthy clients
+
+Write-Host " | "(($AllDevices | Where-Object {($_.ClientCheckPass -gt 1)}).count)"unhealthy clients"
+
+if ((($AllDevices | Where-Object {($_.ClientCheckPass -gt 1)}).count) -gt 0)
+{
+    $JSON_CLientHealth = $JSON_CLientHealth + ("{""name"": """",""value"": "">" + ($AllDevices | Where-Object {($_.ClientCheckPass -gt 1)}).count + " unhealthy clients" + """},")
+}
+
+# Unsupported OS information
+
+$UnsuportedDevices = @($AllDevices | Where-Object {($SupportedOSs -notcontains $_.DeviceOS) -and ($_.ClientType)})
+
+$UnsupportedOSvers = @($AllDevices | Select-Object DeviceOS,ClientType -Unique | Where-Object {($SupportedOSs -notcontains $_.DeviceOS) -and ($_.ClientType)})
+
+Write-Host " | "$UnsupportedOSvers.count"Unsupported Operating Systems across"$UnsuportedDevices.Count"managed devices"
+
+if ($UnsuportedDevices.count -gt 0)
+{
+    $JSON_CLientHealth = $JSON_CLientHealth + ("{""name"": """",""value"": "">" + $UnsupportedOSvers.count + " unsupported OS's across " + $UnsuportedDevices.Count + " managed devices""},")
+}
+
+# Display the list of unsupported Operating System versions to the console
+
+foreach ($UnsuportedVer in $UnsupportedOSvers)
+{
+    if (($SupportedOSs -notcontains $UnsuportedVer.DeviceOS) -and ($UnsuportedVer.ClientType))
+    { 
+        Write-Host "     | "$UnsuportedVer.DeviceOS
     }
 }
 
 $CMSiteUpdates = get-cmsiteupdate -Fast | where {($_.State -ne 196612)} 
+
+# ------------------------------------------------
+# Configuration Manager Updates
 
 Write-Host ""
 Write-Host "CM Updates Available: "$CMSiteUpdates.count
@@ -300,12 +411,12 @@ $JSON_body = @"
         "facts":
         [
             $JSON_CriticalAlert
-            $JSON_CMUpdate
             $JSON_SUCompliance
+            $JSON_CLientHealth
+            $JSON_CMUpdate
         ],
         "markdown": true
     }],
-
 }
 "@
 
@@ -350,4 +461,3 @@ if ($ScriptDebug -eq $true)
     Write-Host " | (UTC) Script Run Time:"$DateNow.ToUniversalTime() -ForegroundColor Magenta
     Write-Host ""
 }
-
