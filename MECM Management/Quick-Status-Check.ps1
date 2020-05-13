@@ -5,12 +5,13 @@
 # This script does not currently need write permissions to anything.
 #
 # Josh Duncan
-# 2020-05-05
+# 2020-05-13
 # https://github.com/Josh-Duncan
 # https://github.com/Josh-Duncan/MEM_MECM/wiki/Quick-Health-Check.ps1
 #
 # TODO: Add optiona logging output with rolling option
 # TODO: Update this to trigger multiple updates at the same time and monitor.  Will need to closely monitor server performance.
+# TODO: Add Compliance checks
 
 
 $TeamsChannelWebhook = ""
@@ -37,7 +38,7 @@ $SiteCode = "Primary Site Code"
 $ProviderMachineName = "Primary Server Name"
     # Primary Site Server Name
 
-    #List of Supported OS's
+    # List of Supported OS's
 $SupportedOSs = "Microsoft Windows NT Workstation 10.0",
                 ` "Microsoft Windows NT Workstation 10.0 (Tablet Edition)",
                 ` "Microsoft Windows NT Server 10.0",
@@ -49,22 +50,26 @@ $SupportedOSs = "Microsoft Windows NT Workstation 10.0",
                 ` "Microsoft Windows NT Advanced Server 6.2"
     # ---
 
-    #Devices in CM that should be ignored for compliance and health checks
+    # Devices in CM that should be ignored for compliance and health checks
 $IgnoreDevices = "Provisioning Device (Provisioning Device)",
                 ` "x86 Unknown Computer (x86 Unknown Computer)",
                 ` "x64 Unknown Computer (x64 Unknown Computer)"
     # ---
 
-    #Make SCCM Alert errors mean something useful to anyone who's not familiar ith CM alerts.
+    # Make SCCM Alert errors mean something useful to anyone who's not familiar ith CM alerts.
 $CMErrorTranslation = @{
                 '$DatabaseFreeSpaceWarningName' = 'Database Free Space Warning';
                 'ExampleNextRecord' = 'Future Translation';
                     }
 
-    #The list of errors that should have their information pulled from the "InstanceNameParam1" field instead of the Name field.
+    # The list of errors that should have their information pulled from the "InstanceNameParam1" field instead of the Name field.
 $CMErrorParam1 = '$SUMCompliance2UpdateGroupDeploymentName',
                 ` 'Rule Failure alert'
     # ---
+
+$SUPSyncSChedule = 2
+    # How often the Software Update services are expected to sync (days)
+    # In large environemnts that have large time zone difference, add an extra day.
 
 # ------------------------------------------------
 # No variables to edit below here...
@@ -179,7 +184,6 @@ else
 {
     foreach ($Alert in $CMAlerts_Critical)
     {
-
         if  ($CMErrorTranslation.Contains($Alert.Name))
         {
             write-host "    | "$CMErrorTranslation.($Alert.Name)
@@ -198,7 +202,6 @@ else
     }
 }
 $Alert = @()
-
 
 Write-Host ""
 write-host "   Warning"
@@ -226,6 +229,53 @@ else
 # ------------------------------------------------
 # Display Software Update Information
 
+# Software Update Sync check
+$SUPSourceServer = Get-CMSoftwareUpdateSyncStatus | where {($_.WSUSSourceServer -eq "Microsoft Update")}
+$SUPERROR = 0
+if ($SUPSourceServer.Count -eq 0)
+{
+    Write-Host "No Software Update Point Found"
+}
+else
+{
+    $SUPSyncStatus = Get-CMSoftwareUpdateSyncStatus
+
+    Write-Host ""
+    write-host "Primary Software Update Point:"$SUPSourceServer.WSUSServerName
+    Write-Host "Software Update Points Found:"$SUPSyncStatus.count
+
+    foreach ($SUPServer in $SUPSyncStatus)
+    {
+        Write-host "  |"$SUPServer.WSUSServerName" | "$SUPServer.LastSuccessfulSyncTime" | "$SUPServer.SyncCatalogVersion
+        if ($SUPServer.SyncCatalogVersion -lt $SUPSourceServer.SyncCatalogVersion)
+        {
+            Write-host "    |  Out of sync!  Catalog number is"$SUPServer.SyncCatalogVersion"and source server is"$SUPSourceServer.SyncCatalogVersion -ForegroundColor Red
+            $SUPERROR++
+        }
+        if ($SUPServer.LastSuccessfulSyncTime.AddDays($SUPSyncSChedule) -lt $DateNow.ToUniversalTime())
+        {
+            Write-host "    |  Last succesfull sync"$SUPSourceServer.LastSuccessfulSyncTime -ForegroundColor Red
+            $SUPERROR++
+        }
+    }
+}
+if ($SUPERROR++ -ne 0)
+{
+    $JSON_SUPStatus = "{""name"": ""Software Update Points"",""value"": """ + $SUPSyncStatus.count + """},"
+    foreach ($SUPServer in $SUPSyncStatus)
+    {
+        if ($SUPServer.SyncCatalogVersion -lt $SUPSourceServer.SyncCatalogVersion)
+        {
+            $JSON_SUPStatus = $JSON_SUPStatus + "{""name"": """",""value"": "">" + $SUPServer.WSUSServerName + " catalog out of sync""},"
+        }
+        if ($SUPServer.LastSuccessfulSyncTime.AddDays($SUPSyncSChedule) -lt $DateNow.ToUniversalTime())
+        {
+            $JSON_SUPStatus = $JSON_SUPStatus + "{""name"": """",""value"": "">" + $SUPServer.WSUSServerName + " last sync " + $SUPServer.LastSuccessfulSyncTime + """},"
+        }
+    }
+}
+
+# Update Deployment check
 $BelowCompliance = 0
 $SUDeployments = Get-CMDeployment | where {($_.FeatureType -eq 5)}
 
@@ -289,7 +339,6 @@ $i = 0
 
 foreach ($SUDeployment in $SUDeployments)
 {
-    
     try{($SUDeployment.SummarizationTime -ne $null) | Out-Null
         if (([math]::Round($SUDeployment.NumberSuccess / $SUDeployment.NumberTargeted * 100,1)) -lt $SUMinCompliance)
         {$BelowCompliance++}
@@ -411,6 +460,7 @@ $JSON_body = @"
         "facts":
         [
             $JSON_CriticalAlert
+            $JSON_SUPStatus
             $JSON_SUCompliance
             $JSON_CLientHealth
             $JSON_CMUpdate
