@@ -7,7 +7,7 @@
 # Josh Duncan
 # 2021-03-17
 # https://github.com/Josh-Duncan
-# https://github.com/Josh-Duncan/MEM_MECM/wiki/Quick-Health-Check.ps1
+# https://github.com/Josh-Duncan/Microsoft-Endpoint-Management/wiki/CreateBoundaries_ByList.ps1
 #
 # The bulk of the work came from Tao Yang and his blog
 #    https://blog.tyang.org/2011/05/01/powershell-functions-get-ipv4-network-start-and-end-address/
